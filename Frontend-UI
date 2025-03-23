@@ -1,0 +1,73 @@
+import React, { useState } from "react";
+
+export default function HomePage() {
+  const [text, setText] = useState("");
+  const [theme, setTheme] = useState("light");
+
+  const handleSpeechInput = () => {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "en-US";
+    recognition.start();
+
+    recognition.onresult = (event) => {
+      const speechText = event.results[0][0].transcript;
+      setText(speechText);
+    };
+  };
+
+  const handleThemeToggle = () => {
+    setTheme(theme === "light" ? "dark" : "light");
+  };
+
+  return (
+    <div
+      className={`min-h-screen flex flex-col items-center justify-center px-4 py-10 transition-colors duration-300 ${
+        theme === "light"
+          ? "bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 text-gray-800"
+          : "bg-gradient-to-br from-gray-900 via-gray-800 to-gray-700 text-gray-100"
+      }`}
+    >
+      <div className={`w-full max-w-md rounded-2xl shadow-xl p-6 flex flex-col gap-4 transition-colors duration-300 ${
+        theme === "light"
+          ? "bg-white/70 backdrop-blur-md"
+          : "bg-gray-800/80 backdrop-blur-md"
+      }`}>
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Mental Health Monitor</h1>
+          <button
+            onClick={handleThemeToggle}
+            className="text-sm px-3 py-1 rounded-full bg-gray-200 dark:bg-gray-700 hover:scale-105 transition"
+          >
+            {theme === "light" ? "Dark" : "Light"} Mode
+          </button>
+        </div>
+
+        <textarea
+          rows="4"
+          className={`w-full rounded-xl p-3 border transition-colors duration-300 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+            theme === "light"
+              ? "border-gray-300 bg-white/60 text-gray-800"
+              : "border-gray-600 bg-gray-900/60 text-gray-100"
+          }`}
+          placeholder="How are you feeling today? You can also speak..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleSpeechInput}
+            className="flex-1 rounded-xl bg-purple-400 hover:bg-purple-500 text-white font-semibold py-2 transition shadow"
+          >
+            🎤 Speak
+          </button>
+          <button
+            className="flex-1 rounded-xl bg-blue-400 hover:bg-blue-500 text-white font-semibold py-2 transition shadow"
+          >
+            🧠 Analyze
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
