@@ -1,0 +1,111 @@
+
+
+import zipfile
+import os
+
+# Extract RAVDESS
+speech_zip_path = "/content/Audio_Speech_Actors_01-24.zip"  # Update if your filename is different
+speech_extract_path = "/content/Audio_Actors_01-24.zip"
+with zipfile.ZipFile(speech_zip_path, 'r') as zip_ref:
+    zip_ref.extractall(speech_extract_path)
+
+# Extract DASH 2020 Text Dataset
+text_zip_path = "/content/DASH_2020_Drug_Data.zip"
+text_extract_path = "/content/dash_text"
+with zipfile.ZipFile(text_zip_path, 'r') as zip_ref:
+    zip_ref.extractall(text_extract_path)
+
+# View contents
+print("Speech files:", os.listdir(speech_extract_path)[:5])
+print("Text files:", os.listdir(text_extract_path))
+
+
+import pandas as pd
+
+df = pd.read_csv("/content/dash_text/DASH_2020_Drug_Data.csv")
+print(df.columns.tolist())  # Show all column names to pick from
+print(df.head())  # Preview data
+
+
+import os
+
+# Show EVERYTHING extracted into /content
+for root, dirs, files in os.walk("/content"):
+    print("DIR:", root)
+    for file in files:
+        print("   →", file)
+
+
+import glob
+
+wav_files = glob.glob("/content/Audio_Actors_01-24.zip/**/*.wav", recursive=True)
+print("Number of .wav files found:", len(wav_files))
+if wav_files:
+    print("Sample file:", wav_files[0])
+
+
+import librosa
+import numpy as np
+import os
+
+def extract_mfcc(file_path, max_pad_len=216):
+    y, sr = librosa.load(file_path, sr=None)
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
+    if mfcc.shape[1] < max_pad_len:
+        pad_width = max_pad_len - mfcc.shape[1]
+        mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
+    else:
+        mfcc = mfcc[:, :max_pad_len]
+    return mfcc
+
+emotion_map = {
+    "01": 0, "02": 1, "03": 2, "04": 3,
+    "05": 4, "06": 5, "07": 6, "08": 7
+}
+
+speech_data = []
+speech_labels = []
+
+for file in wav_files:
+    try:
+        emotion_code = os.path.basename(file).split("-")[2]
+        label = emotion_map[emotion_code]
+        mfcc = extract_mfcc(file)
+        speech_data.append(mfcc)
+        speech_labels.append(label)
+    except Exception as e:
+        print(f"Error in {file}: {e}")
+
+
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+
+X = np.array(speech_data)
+y = np.array(speech_labels)
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
+
+speech_model = Sequential([
+    LSTM(128, return_sequences=True, input_shape=(40, 216)),
+    Dropout(0.3),
+    LSTM(64),
+    Dropout(0.3),
+    Dense(32, activation='relu'),
+    Dense(8, activation='softmax')  # 8 emotion classes
+])
+
+speech_model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+speech_model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=10, batch_size=16)
+
+
+test_file = '/content/Audio_Actors_01-24.zip/Actor_18/03-01-08-02-02-01-18.wav'  # Example
+
+test_mfcc = extract_mfcc(test_file)
+test_mfcc = np.expand_dims(test_mfcc, axis=0)
+
+pred = speech_model.predict(test_mfcc)
+emotion_label = np.argmax(pred)
+
+print("Predicted Emotion Class:", emotion_label)
