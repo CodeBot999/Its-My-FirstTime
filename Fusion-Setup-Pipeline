@@ -1,0 +1,176 @@
+
+
+speech_data  = [...]  # your MFCCs
+speech_labels = [...] # emotion labels (0–7)
+
+
+emotion_map = {
+    '01': 0,  # neutral
+    '02': 1,  # calm
+    '03': 2,  # happy
+    '04': 3,  # sad
+    '05': 4,  # angry
+    '06': 5,  # fearful
+    '07': 6,  # disgust
+    '08': 7   # surprised
+}
+
+
+speech_data.append(mfcc)        # MFCC feature
+speech_labels.append(label)     # Mapped integer label
+
+
+import librosa
+import os
+
+def extract_label_from_filename(file_path):
+
+  try:
+    emotion_code = os.path.basename(file_path).split("-")[2]
+    return emotion_map[emotion_code]  # Assuming emotion_map is defined elsewhere
+  except IndexError:
+    print(f"Warning: Could not extract label from {file_path}")
+    return -1  # Or handle the error differently
+
+speech_data = []
+speech_labels = []
+
+for file_path in wav_files:
+    label = extract_label_from_filename(file_path)
+    mfcc = extract_mfcc(file_path)
+    speech_data.append(mfcc)
+    speech_labels.append(label)
+
+print(np.array(speech_data).shape)
+print(np.array(speech_labels).shape)
+
+
+print("Samples:", len(speech_data))
+print("Shape of first sample:", np.array(speech_data[0]).shape if speech_data else "Empty")
+
+
+speech_data = []
+speech_labels = []
+
+for file_path in wav_files:
+    try:
+        label = extract_label_from_filename(file_path)
+        if label == -1:
+            continue  # skip if label was bad
+
+        mfcc = extract_mfcc(file_path)
+        if mfcc.shape != (40, 216):  # or whatever shape you expect
+            print(f"Skipped due to shape: {file_path}, shape={mfcc.shape}")
+            continue
+
+        speech_data.append(mfcc)
+        speech_labels.append(label)
+
+    except Exception as e:
+        print(f"Error processing {file_path}: {e}")
+
+
+print("Final samples:", len(speech_data))
+
+
+from sklearn.model_selection import train_test_split
+import numpy as np
+
+X_speech = np.array(speech_data)
+y_speech = np.array(speech_labels)
+
+X_speech_train, X_speech_val, y_speech_train, y_speech_val = train_test_split(
+    X_speech, y_speech, test_size=0.2, random_state=42)
+
+
+speech_probs = speech_model.predict(X_speech_val)
+
+
+text_probs = text_model.predict(X_val)
+
+
+text_probs_subset = text_probs[:288]  # or match whichever is smaller
+fusion_input = np.concatenate([speech_probs, text_probs_subset], axis=1)
+
+
+min_len = min(len(speech_probs), len(text_probs))
+
+fusion_labels = []
+
+for s_pred, t_pred in zip(speech_probs[:min_len], text_probs[:min_len]):
+    s_class = np.argmax(s_pred)
+    t_class = np.argmax(t_pred)
+
+    if s_class in [3, 4, 5, 6] or t_class in [2, 3, 4]:  # sad/angry + negative text
+        fusion_labels.append(2)  # High Risk
+    elif s_class in [2] or t_class in [1]:
+        fusion_labels.append(1)  # Moderate Risk
+    else:
+        fusion_labels.append(0)  # Low Risk
+
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+
+# Simulated fusion_labels from earlier step
+# fusion_labels = [0, 1, 2, ...]  # low/mod/high risk
+
+X_train_f, X_val_f, y_train_f, y_val_f = train_test_split(
+    fusion_input, fusion_labels[:len(fusion_input)], test_size=0.2, random_state=42
+)
+
+fusion_model = RandomForestClassifier(n_estimators=100)
+fusion_model.fit(X_train_f, y_train_f)
+
+y_pred_f = fusion_model.predict(X_val_f)
+print(classification_report(y_val_f, y_pred_f))
+
+
+from sklearn.metrics import classification_report
+
+target_names = ["Low Risk", "Moderate Risk", "High Risk"]
+print(classification_report(y_val_f, y_pred_f, target_names=target_names))
+
+
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+# Generate confusion matrix
+cm = confusion_matrix(y_val_f, y_pred_f)
+labels = ["Low", "Moderate", "High"]
+
+# Plot it
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+fig, ax = plt.subplots(figsize=(6, 6))
+disp.plot(cmap='Blues', ax=ax)
+plt.title("Fusion Model - Mental Health Risk Confusion Matrix")
+plt.show()
+
+
+## **Saving the model**
+
+# Save fusion model
+import joblib
+joblib.dump(fusion_model, "fusion_model.pkl")
+
+# Save tokenizer
+joblib.dump(tokenizer, "text_tokenizer.pkl")
+
+# Save Keras models
+speech_model.save("speech_model.h5")
+text_model.save("text_model.h5")
+
+
+speech_model.save("speech_model.h5")
+text_model.save("text_model.h5")
+joblib.dump(fusion_model, "fusion_model.pkl")
+joblib.dump(tokenizer, "text_tokenizer.pkl")
+
+
+from google.colab import files
+
+files.download("speech_model.h5")
+files.download("text_model.h5")
+files.download("fusion_model.pkl")
+files.download("text_tokenizer.pkl")
