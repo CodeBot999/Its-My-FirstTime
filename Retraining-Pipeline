@@ -1,0 +1,57 @@
+# **Retraining pipeline**
+
+import numpy as np
+import pandas as pd
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, Conv1D, GlobalMaxPooling1D, Dense
+from sklearn.model_selection import train_test_split
+
+
+# Example DataFrame
+df = pd.read_csv("/content/new_text_data/training.1600000.processed.noemoticon.csv", encoding="latin-1", header=None)
+df = df[[5, 0]]  # Text and Label columns
+df.columns = ["text", "label"]
+df = df.dropna()
+
+# Optional: convert labels to 0-based index
+df['label'] = pd.factorize(df['label'])[0]
+
+
+MAX_LEN = 200
+VOCAB_SIZE = 10000
+NUM_CLASSES = len(df['label'].unique())
+
+tokenizer = Tokenizer(num_words=VOCAB_SIZE, oov_token="<OOV>")
+tokenizer.fit_on_texts(df['text'])
+
+sequences = tokenizer.texts_to_sequences(df['text'])
+X = pad_sequences(sequences, maxlen=MAX_LEN, padding='post', truncating='post')
+
+
+y = to_categorical(df['label'], num_classes=NUM_CLASSES)
+
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+model = Sequential()
+model.add(Embedding(input_dim=VOCAB_SIZE, output_dim=128))  # Removed input_length
+model.add(Conv1D(64, 5, activation='relu'))
+model.add(GlobalMaxPooling1D())
+model.add(Dense(64, activation='relu'))
+model.add(Dense(NUM_CLASSES, activation='softmax'))
+
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+history = model.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=5,
+    batch_size=32
+)
+
+
